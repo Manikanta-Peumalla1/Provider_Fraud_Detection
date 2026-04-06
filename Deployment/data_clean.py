@@ -10,6 +10,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def _resolve_input_path(path: str) -> Path:
+    """
+    Resolve input file path to an absolute Path, checking multiple locations.
+
+    Tries the path as-is, then relative to workspace root, then normalized relative,
+    then relative to current working directory.
+
+    Parameters
+    ----------
+    path : str
+        The input path string.
+
+    Returns
+    -------
+    Path
+        The resolved absolute path to the file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the file cannot be found in any of the attempted locations.
+    """
     candidate = Path(path)
     if candidate.exists():
         return candidate
@@ -35,6 +56,28 @@ def _resolve_input_path(path: str) -> Path:
 
 
 def read_provider_data(path:str,nrows:Optional[int]=None)->pd.DataFrame:
+    """
+    Read and validate provider data from a CSV file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the provider CSV file.
+    nrows : int, optional
+        Number of rows to read. If None, reads all.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with provider data.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the file does not exist.
+    ValueError
+        If the file is empty.
+    """
     # Read the Master Providers CSV file into a dataframe
     #df_provider = pd.read_csv(path)
     #return df_provider
@@ -89,7 +132,21 @@ EXPECTED_COLUMNS = (
 
 
 def _parse_dates(df: pd.DataFrame, col: str) -> pd.Series:
-    """Parse a column to datetime, warn on failures."""
+    """
+    Parse a column in the DataFrame to datetime, coercing errors to NaT.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame containing the column.
+    col : str
+        The column name to parse.
+
+    Returns
+    -------
+    pd.Series
+        The parsed datetime series.
+    """
     parsed = pd.to_datetime(df[col], errors='coerce')
     n_failed = parsed.isna().sum() - df[col].isna().sum()
     if n_failed > 0:
@@ -98,14 +155,37 @@ def _parse_dates(df: pd.DataFrame, col: str) -> pd.Series:
 
 
 def _validate_columns(df: pd.DataFrame, path: str) -> None:
-    """Warn about any expected columns that are missing from the file."""
+    """
+    Validate that expected columns are present in the DataFrame, logging warnings for missing ones.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to validate.
+    path : str
+        The file path for logging purposes.
+    """
     missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
     if missing:
         logger.warning(f"File '{path}' is missing expected column(s): {missing}")
 
 
 def _safe_drop(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Drop only the columns that actually exist (avoids KeyError in prod)."""
+    """
+    Drop columns from DataFrame if they exist, logging warnings for absent ones.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to modify.
+    columns : list[str]
+        List of column names to drop.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with columns dropped.
+    """
     to_drop = [c for c in columns if c in df.columns]
     skipped  = [c for c in columns if c not in df.columns]
     if skipped:
@@ -222,17 +302,22 @@ def read_op_data(path:str,nrows:Optional[int]=None)->pd.DataFrame:
 
     Parameters
     ----------
-    path  : str | Path — Location of the inpatient CSV file.
-    nrows : int, optional — Read only the first N rows (useful for testing).
+    path : str | Path
+        Location of the outpatient CSV file.
+    nrows : int, optional
+        Read only the first N rows (useful for testing).
 
     Returns
     -------
-    pd.DataFrame with engineered IP features, ready for downstream modelling.
+    pd.DataFrame
+        DataFrame with engineered OP features, ready for downstream modelling.
 
     Raises
     ------
-    FileNotFoundError : if the path does not exist.
-    ValueError        : if the file is empty.
+    FileNotFoundError
+        If the path does not exist.
+    ValueError
+        If the file is empty.
     """
     file_path = _resolve_input_path(path)
     if not file_path.exists():
@@ -272,12 +357,39 @@ def read_op_data(path:str,nrows:Optional[int]=None)->pd.DataFrame:
 
 
 def _mode_or_nan(series: pd.Series):
+    """
+    Compute the mode of a series, returning NaN if no mode exists.
+
+    Parameters
+    ----------
+    series : pd.Series
+        The series to compute mode for.
+
+    Returns
+    -------
+    scalar
+        The mode value or np.nan.
+    """
     mode = series.mode(dropna=True)
     return mode.iloc[0] if not mode.empty else np.nan
 
 
 def aggregate_ip_data(df_ip: pd.DataFrame, df_provider: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    """Aggregate inpatient claims to provider-level features."""
+    """
+    Aggregate inpatient claims to provider-level features.
+
+    Parameters
+    ----------
+    df_ip : pd.DataFrame
+        Preprocessed inpatient data.
+    df_provider : pd.DataFrame, optional
+        Provider data to merge with.
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated IP features per provider.
+    """
     if df_provider is not None:
         df_ip = df_provider[['Provider']].merge(df_ip, on='Provider', how='left')
 
@@ -295,7 +407,21 @@ def aggregate_ip_data(df_ip: pd.DataFrame, df_provider: Optional[pd.DataFrame] =
 
 
 def aggregate_op_data(df_op: pd.DataFrame, df_provider: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    """Aggregate outpatient claims to provider-level features."""
+    """
+    Aggregate outpatient claims to provider-level features.
+
+    Parameters
+    ----------
+    df_op : pd.DataFrame
+        Preprocessed outpatient data.
+    df_provider : pd.DataFrame, optional
+        Provider data to merge with.
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated OP features per provider.
+    """
     if df_provider is not None:
         df_op = df_provider[['Provider']].merge(df_op, on='Provider', how='left')
 
@@ -312,6 +438,28 @@ def aggregate_op_data(df_op: pd.DataFrame, df_provider: Optional[pd.DataFrame] =
 
 
 def read_beneficiary_data(path: str, nrows: Optional[int] = None) -> pd.DataFrame:
+    """
+    Read and preprocess beneficiary data from a CSV file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the beneficiary CSV file.
+    nrows : int, optional
+        Number of rows to read.
+
+    Returns
+    -------
+    pd.DataFrame
+        Preprocessed beneficiary data.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the file does not exist.
+    ValueError
+        If the file is empty.
+    """
     file_path = _resolve_input_path(path)
     if not file_path.exists():
         raise FileNotFoundError(f"Beneficiary data file not found: '{path}'")
@@ -344,6 +492,23 @@ def read_beneficiary_data(path: str, nrows: Optional[int] = None) -> pd.DataFram
 
 
 def aggregate_beneficiary_data(df_benf: pd.DataFrame, df_ip: pd.DataFrame, df_op: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregate beneficiary data to provider-level features.
+
+    Parameters
+    ----------
+    df_benf : pd.DataFrame
+        Preprocessed beneficiary data.
+    df_ip : pd.DataFrame
+        Inpatient claims data.
+    df_op : pd.DataFrame
+        Outpatient claims data.
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated beneficiary features per provider.
+    """
     df_ip_op_benf = pd.concat([
         df_ip[['Provider', 'BeneID']],
         df_op[['Provider', 'BeneID']]
@@ -377,7 +542,19 @@ def aggregate_beneficiary_data(df_benf: pd.DataFrame, df_ip: pd.DataFrame, df_op
 
 
 def _resolve_output_path(path: str) -> Path:
-    """Resolve output path relative to workspace root if relative."""
+    """
+    Resolve output path relative to workspace root if relative.
+
+    Parameters
+    ----------
+    path : str
+        The output path string.
+
+    Returns
+    -------
+    Path
+        The resolved absolute path.
+    """
     p = Path(path)
     if p.is_absolute():
         return p
@@ -393,6 +570,29 @@ def prepare_model_input(
     output_path: str,
     nrows: Optional[int] = None,
 ) -> pd.DataFrame:
+    """
+    Prepare the complete model input dataset by reading, preprocessing, aggregating, and merging all data sources.
+
+    Parameters
+    ----------
+    provider_path : str
+        Path to provider data CSV.
+    ip_path : str
+        Path to inpatient data CSV.
+    op_path : str
+        Path to outpatient data CSV.
+    benf_path : str
+        Path to beneficiary data CSV.
+    output_path : str
+        Path to save the output CSV.
+    nrows : int, optional
+        Number of rows to read from each file.
+
+    Returns
+    -------
+    pd.DataFrame
+        The final merged dataset.
+    """
     df_provider = read_provider_data(provider_path, nrows=nrows)
     df_ip = read_ip_data(ip_path, nrows=nrows)
     df_op = read_op_data(op_path, nrows=nrows)
@@ -436,4 +636,4 @@ if __name__ == '__main__':
         output_path=args.output,
         nrows=args.nrows,
     )
-
+    
