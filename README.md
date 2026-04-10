@@ -50,17 +50,13 @@ These datasets are merged and transformed to create a **provider-level dataset**
 - Fraud vs non-fraud comparison
 - Feature correlations
 
-### 4. Handling Imbalanced Data
-- Fraud cases are rare → class imbalance handled using:
-  - SMOTE / Resampling techniques
-
-### 5. Model Building
+### 4. Model Building
 Implemented multiple ML models:
 - Logistic Regression
 - Random Forest
 - XGBoost / Gradient Boosting
 
-### 6. Model Evaluation
+### 5. Model Evaluation
 - Accuracy
 - Precision, Recall, F1-score
 - Confusion Matrix
